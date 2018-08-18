@@ -8,7 +8,7 @@
     <script src="static/jquery-3.2.1.min.js"></script>
     <script src="static/throttle.js"></script>
 
-    <title>Remote GoPiGo3</title>
+    <title>Remote Camera</title>
 
   </head>
   <body>
@@ -21,17 +21,20 @@
 
             <!--
             Example of video source shown on the whole page
-
+                -->
             <video poster="https://s3-us-west-2.amazonaws.com/s.cdpn.io/4273/polina.jpg" id="bgvid" playsinline autoplay muted loop>
-            WCAG general accessibility recommendation is that media such as background video play through only once. Loop turned on for the purposes of illustration; if removed, the end of the video will fade in the same way created by pressing the "Pause" button
-            <!--<source src="http://thenewcode.com/assets/videos/polina.webm" type="video/webm">
-            <source src="http://thenewcode.com/assets/videos/polina.mp4" type="video/mp4">
-            </video>
+            <!-- WCAG general accessibility recommendation is that media such as background video play through only once. Loop turned on for the purposes of illustration; if removed, the end of the video will fade in the same way created by pressing the "Pause" button
             -->
+                <source src="http://thenewcode.com/assets/videos/polina.webm" type="video/webm">
+            
+                <source src="http://thenewcode.com/assets/videos/polina.mp4" type="video/mp4"> 
+                
+            </video>
+            
 
         </div>
         <div class="robot">
-            GoPiGo3 - Live Stream
+            PiCamera - Live Stream
             <ul>
                 <li id="state">State: Stop</li>
                 <li id="angle_deg">Angle Degrees: 0°</li>
@@ -71,12 +74,13 @@
         document.getElementById('zone_joystick').onclick = createNipple;
         // function for throttling the rate of sending data
         // sends data every 250 ms
+        //modified to 50 ms
         var send_throttled_data = throttle(function(server_address, query_string, sent_data){
             setOnScreen(sent_data);
             console.log('move robot', sent_data);
 
             $.post(server_address + query_string);
-        }, 250);
+        }, 50);
 
         // after creating the joystick, state some event handlers for it
         function bindNipple() {
