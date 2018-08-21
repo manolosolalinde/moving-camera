@@ -1,3 +1,8 @@
+# GUIDE PG 10
+# https://cdn-shop.adafruit.com/datasheets/PCA9685.pdf
+
+#exec(open("servo_driver.py").read())
+
 import smbus
 import time
 
@@ -16,6 +21,19 @@ bus.write_word_data(addr, 0x08, 1250)
 
 bus.write_word_data(addr, 0x0a, 0)
 bus.write_word_data(addr, 0x0c, 1250)
+
+#GO TO SLEEP (RETURNS TO SLEEP POSITION)
+bus.write_byte_data(addr, 0, 0x10)
+
+# setup configuration 
+config = 0
+config |= 0 # ALLCALL
+config |= 0 << 1 # SUB1
+config |= 0 << 2 # SUB2
+config |= 0 << 3 # SUB3
+config |= 1 << 4 # SLEEP
+bus.write_byte_data(addr, 0, config)
+
 
 # while True:
 # 	pipein = open("/var/www/html/FIFO_pipan", 'r')
@@ -51,23 +69,23 @@ class PanTilt:
 
     """
     REG_CONFIG = 0x00
-    REG_SERVO1 = 0x01 #0x08 in sparkfun (pan)
-    REG_SERVO2 = 0x03 #0x0c in sparkfun (tilt)
+    REG_SERVO1 = 0x08 #0x08 in sparkfun (pan), 0x01 pimoroni
+    REG_SERVO2 = 0x0c #0x0c in sparkfun (tilt), 0x03 pimoroni
     REG_WS2812 = 0x05
     REG_UPDATE = 0x4E
     UPDATE_WAIT = 0.03
     NUM_LEDS = 24
 
     def __init__(self,
-                 enable_lights=True,
-                 idle_timeout=2, # Idle timeout in seconds
+                 enable_lights=False, # TRUE in pimoroni
+                 idle_timeout=5, # Idle timeout in seconds, pimo 2segs
                  light_mode=WS2812,
                  light_type=RGB,
-                 servo1_min=575,
-                 servo1_max=2325,
-                 servo2_min=575,
-                 servo2_max=2325,
-                 address=0x15, # 0x40 in sparkfun
+                 servo1_min=833, #575 pimo, 833 spark
+                 servo1_max=1667, # 2325 pimo, 1667 spark
+                 servo2_min=833,
+                 servo2_max=1667,
+                 address=0x40, # 0x40 in sparkfun, 0x15 in pimoroni
                  i2c_bus=None):
         #address= 0x40 in sparkfun
 
@@ -140,6 +158,7 @@ class PanTilt:
     def _set_config(self):
         """Generate config value for PanTilt HAT and write to device."""
 
+        # TODO: Modificar esta parte para adecuar al sparkfun
         config = 0
         config |= self._enable_servo1
         config |= self._enable_servo2 << 1
@@ -147,7 +166,7 @@ class PanTilt:
         config |= self._light_mode    << 3
         config |= self._light_on      << 4
 
-        self._i2c_write_byte(self.REG_CONFIG, config)
+        # self._i2c_write_byte(self.REG_CONFIG, config)
 
     def _check_int_range(self, value, value_min, value_max):
         """Check the type and bounds check an expected int value."""
@@ -325,8 +344,10 @@ class PanTilt:
         self._check_int_range(brightness, 0, 255)
 
         if self._light_mode == PWM:
+            pass
             # The brightness value is taken from the first register of the WS2812 chain
-            self._i2c_write_byte(self.REG_WS2812, brightness)
+            # TODO correct this
+            # self._i2c_write_byte(self.REG_WS2812, brightness)
 
     def set_all(self, red, green, blue, white=None):
         """Set all pixels in the buffer.
@@ -403,12 +424,13 @@ class PanTilt:
     def show(self):
         """Display the buffer on the connected WS2812 strip."""
 
+        # TODO: update
         self.setup()
 
-        self._i2c_write_block(self.REG_WS2812, self._pixels[:32])
-        self._i2c_write_block(self.REG_WS2812 + 32, self._pixels[32:64])
-        self._i2c_write_block(self.REG_WS2812 + 64, self._pixels[64:])
-        self._i2c_write_byte(self.REG_UPDATE, 1)
+        # self._i2c_write_block(self.REG_WS2812, self._pixels[:32])
+        # self._i2c_write_block(self.REG_WS2812 + 32, self._pixels[32:64])
+        # self._i2c_write_block(self.REG_WS2812 + 64, self._pixels[64:])
+        # self._i2c_write_byte(self.REG_UPDATE, 1)
 
     def servo_enable(self, index, state):
         """Enable or disable a servo.
@@ -555,7 +577,7 @@ class PanTilt:
 
 def main():
     bus = smbus.SMBus(1)
-    bus.write_word_data
+    bus.write_word_data(addr,0x08,1200)
 
 
 if __name__ == "__main__":
