@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 # Dexter Industries GoPiGo3 Remote Camera robot
 # With this project you can control your Raspberry Pi Robot, the GoPiGo3, with a phone, tablet, or browser.
 # Remotely view your robot as first person in your browser.
@@ -21,10 +22,13 @@ from werkzeug.serving import make_server
 
 # imports needed for stream server
 import io
-# import picamera
+import picamera
 import socketserver
 from threading import Condition, Thread, Event
 from http import server
+
+# new imports
+from driver import smooth_servo
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -40,7 +44,8 @@ def signal_handler(signal, frame):
 
 # Directory Path can change depending on where you install this file.  Non-standard installations
 # may require you to change this directory.
-directory_path = '/media/manolosolalinde/DATOS/BITBUCKET/moving-camera/static'
+#directory_path = '/media/manolosolalinde/DATOS/BITBUCKET/moving-camera/static'
+directory_path = '/home/pi/BITBUCKET/moving-camera/static'
 
 MAX_FORCE = 5.0
 MIN_SPEED = 100
@@ -56,6 +61,8 @@ MAX_SPEED = 300
 # except Exception:
 #     logging.critical("Unexpected error when initializing GoPiGo3 object")
 #     sys.exit(3)
+
+pantilt = smooth_servo.PanTilt()
 
 HOST = "0.0.0.0"
 WEB_PORT = 5000
@@ -92,6 +99,9 @@ def robot_commands():
     determined_speed = MIN_SPEED + force * (MAX_SPEED - MIN_SPEED) / MAX_FORCE
     if determined_speed > MAX_SPEED:
         determined_speed = MAX_SPEED
+
+    print("hello movement")
+    pantilt.move(angle_degrees,force)
 
     # if state == 'move':
     #     # for moving backward
@@ -170,36 +180,36 @@ class StreamingOutput(object):
             self.buffer.seek(0)
         return self.buffer.write(buf)
 
-# class StreamingHandler(server.BaseHTTPRequestHandler):
-#     '''
-#     Implementing GET request for the video stream.
-#     '''
-#     def do_GET(self):
-#         if self.path == '/stream.mjpg':
-#             self.send_response(200)
-#             self.send_header('Age', 0)
-#             self.send_header('Cache-Control', 'no-cache, private')
-#             self.send_header('Pragma', 'no-cache')
-#             self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
-#             self.end_headers()
-#             try:
-#                 while True:
-#                     with output.condition:
-#                         output.condition.wait()
-#                         frame = output.frame
-#                     self.wfile.write(b'--FRAME\r\n')
-#                     self.send_header('Content-Type', 'image/jpeg')
-#                     self.send_header('Content-Length', len(frame))
-#                     self.end_headers()
-#                     self.wfile.write(frame)
-#                     self.wfile.write(b'\r\n')
-#             except Exception as e:
-#                 logging.warning(
-#                     'Removed streaming client %s: %s',
-#                     self.client_address, str(e))
-#         else:
-#             self.send_error(404)
-#             self.end_headers()
+class StreamingHandler(server.BaseHTTPRequestHandler):
+    '''
+    Implementing GET request for the video stream.
+    '''
+    def do_GET(self):
+        if self.path == '/stream.mjpg':
+            self.send_response(200)
+            self.send_header('Age', 0)
+            self.send_header('Cache-Control', 'no-cache, private')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
+            self.end_headers()
+            try:
+                while True:
+                    with output.condition:
+                        output.condition.wait()
+                        frame = output.frame
+                    self.wfile.write(b'--FRAME\r\n')
+                    self.send_header('Content-Type', 'image/jpeg')
+                    self.send_header('Content-Length', len(frame))
+                    self.end_headers()
+                    self.wfile.write(frame)
+                    self.wfile.write(b'\r\n')
+            except Exception as e:
+                logging.warning(
+                    'Removed streaming client %s: %s',
+                    self.client_address, str(e))
+        else:
+            self.send_error(404)
+            self.end_headers()
 
 class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     allow_reuse_address = True
@@ -215,17 +225,17 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
 
     # firing up the video camera (pi camera)
-        # camera = picamera.PiCamera(resolution='320x240', framerate=30)
-        # output = StreamingOutput()
-        # camera.start_recording(output, format='mjpeg')
-        # logging.info("Started recording with picamera")
-        # STREAM_PORT = 5001
-        # stream = StreamingServer((HOST, STREAM_PORT), StreamingHandler)
+    camera = picamera.PiCamera(resolution='320x240', framerate=30)
+    output = StreamingOutput()
+    camera.start_recording(output, format='mjpeg')
+    logging.info("Started recording with picamera")
+    STREAM_PORT = 5001
+    stream = StreamingServer((HOST, STREAM_PORT), StreamingHandler)
 
     # starting the video streaming server
-        # streamserver = Thread(target = stream.serve_forever)
-        # streamserver.start()
-        # logging.info("Started stream server for picamera")
+    streamserver = Thread(target = stream.serve_forever)
+    streamserver.start()
+    logging.info("Started stream server for picamera")
 
     # starting the web server
     webserver = WebServerThread(app, HOST, WEB_PORT)
@@ -241,12 +251,12 @@ if __name__ == "__main__":
 
     # trigger shutdown procedure
     webserver.shutdown()
-        # camera.stop_recording()
-        # stream.shutdown()
+    camera.stop_recording()
+    stream.shutdown()
 
     # and finalize shutting them down
     webserver.join()
-        # streamserver.join()
+    streamserver.join()
     logging.info("Stopped all threads")
 
     sys.exit(0)
