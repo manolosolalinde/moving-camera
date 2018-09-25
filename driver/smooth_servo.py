@@ -116,15 +116,17 @@ class PanTilt():
         self._f[1] = sin(radians(angle))*force
 
 def main():
-    import Adafruit_PCA9685
-    pwm = Adafruit_PCA9685.PCA9685()
+    # import Adafruit_PCA9685
+    # pwm = Adafruit_PCA9685.PCA9685()
+    # pantilt = PanTilt(pwm)
 
-    pantilt = PanTilt(pwm)
+    pantilt = PanTilt()
     pantilt.move(50,45)
-    time.sleep(2)
+    time.sleep(1)
+    pantilt.move(10,270)
+    time.sleep(1)
     pantilt.stop()
-    # pantilt._update_input(10,45)
-    # pantilt._begin()
+
 
 if __name__ == "__main__":
     main()      
