@@ -10,7 +10,7 @@ MASS = 1 #mass
 DELAY = 0.01
 
 class PanTilt():
-    def __init__(self, pwm=None,*args, **kwargs):
+def __init__(self, pwm=None,*args, **kwargs):
         self._x = np.array([0.0,0.0])
         self._a = np.array([0.0,0.0])
         self._v = np.array([0.0,0.0])

@@ -6,8 +6,6 @@ from math import cos,sin,radians
 #imports for class stepper
 import sys
 import time
-import RPi.GPIO as GPIO
-
 
 KR = 0.2 # Constante de rozamiento
 KR_EDGE = 1 # Constante de rozamiento cerca del borde #TODO
@@ -15,19 +13,36 @@ EDGES = np.array([[-1000,1000],[-1000,1000]]) # Bordes xmin,xmax,ymin,ymax
 MASS = 1 #mass
 DELAY = 0.01
 
-PINS= [17,22,23,24]
+PINS_PAN= [17,22,23,24]
+PINS_TILT= [99,99,99,99] #TODO corregir
 
+# class created to run this module without GPIO library
+class GPIO_DUMMY(object):
+    def __init__(self, *args, **kwargs):
+        self.BCM = 0
+        self.OUT = 0
+    def setmode(self,*args):
+        pass
+    def setup(self,*args):
+        pass
+    def output(self,*args):
+        pass
+
+try:
+    import RPi.GPIO as GPIO
+    gpio_enabled = True
+except:
+    GPIO = GPIO_DUMMY()
+    gpio_enabled =  False
+    print("Unable to load RPi.GPIO")
 
 class Stepper(object):
     def __init__(self,pins,delay=DELAY*1000):
+        self._StepPins = pins
+        self._x = 0
         # Use BCM GPIO references
         # instead of physical pin numbers
         GPIO.setmode(GPIO.BCM)
-        # Define GPIO signals to use
-        # Physical pins 11,15,16,18
-        # GPIO17,GPIO22,GPIO23,GPIO24
-        self._StepPins = pins
-        self._x = 0
         # Set all pins as output
         for pin in self._StepPins:
             print("Setup pins")
@@ -53,6 +68,10 @@ class Stepper(object):
         # Initialise variables
         self._StepCounter = 0
     
+    def __del__(self):
+        # go back to the original position
+        self.steps(-self._x)
+
     def step(self,dir=1,delay=None):
         assert(dir==1 or dir==-1)
         if delay !=0:
@@ -67,7 +86,7 @@ class Stepper(object):
             self._StepCounter = 0
         if (self._StepCounter<0):
             self._StepCounter = self._StepCount+dir
-        print(self._StepCounter)
+        print("Current position x=",self._x)
         print(self._Seq[self._StepCounter])
         for pin in range(0, 4):
             xpin = self._StepPins[pin]
@@ -82,7 +101,7 @@ class Stepper(object):
             dir = -1
         else:
             dir = 1
-        for i in range(steps):
+        for i in range(abs(steps)):
             self.step(dir,delay)
 
 
@@ -103,17 +122,17 @@ class PanTilt():
         self._moving=False
         self.set_steppers(steppers)
 
-    def _read_position(self,channel):
-        pass
-        # TODO
-
     def __del__(self):
         """Return to initial position"""
         if self._steppers is not None:
             pass
             #TODO
+
+    def _read_position(self,channel):
+        pass
+        # TODO
             
-    def set_stepper(self,steppers):
+    def set_steppers(self,steppers):
         if steppers is None:
             self._steppers = None
         else:
@@ -159,14 +178,17 @@ class PanTilt():
             time.sleep(self._delay)
             prev_t = self._t
             self._t = time.time()
+            #TODO: considerar la posibilidad de dejar fijo el dt
             self._dt = self._t - prev_t
             # self._dt=0.01
             self._update()
             #print(f"Location: {self._x}, velocity: {self._v}, acceleration: {self._a}, dt: {dt}")
             print("Location: x{}, velocity: {}, acceleration: {}, dt: {}".format(self._x,self._v,self._a,self._dt))
             if self._steppers is not None:
-                pass
-                #print("pwm: ",self._pwm._device._address)
+                for i in range(0,2):
+                    xi = int(round(self._x[i]))
+                    if xi != self._steppers[i]._x:
+                        self._steppers[i].steps(xi - self._steppers[i]._x,0)
         return True
 
     def stop(self):
@@ -187,12 +209,18 @@ def main():
     # pwm = Adafruit_PCA9685.PCA9685()
     # pantilt = PanTilt(pwm)
 
-    pantilt = PanTilt()
-    pantilt.move(50,45)
-    time.sleep(1)
-    pantilt.move(10,270)
-    time.sleep(1)
-    pantilt.stop()
+    # pantilt = PanTilt()
+    # pantilt.move(50,45)
+    # time.sleep(1)
+    # pantilt.move(10,270)
+    # time.sleep(1)
+    # pantilt.stop()
+
+    pan = Stepper(PINS_PAN)
+    tilt = Stepper(PINS_TILT)
+    steppers = (pan,tilt)
+    pantilt = PanTilt(steppers)
+    pantilt.move(10,30)
 
 
 if __name__ == "__main__":

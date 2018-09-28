@@ -28,7 +28,8 @@ from threading import Condition, Thread, Event
 from http import server
 
 # new imports
-from driver import smooth_servo
+# from driver import smooth_servo
+from driver import smooth_stepper
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -62,7 +63,7 @@ MAX_SPEED = 300
 #     logging.critical("Unexpected error when initializing GoPiGo3 object")
 #     sys.exit(3)
 
-pantilt = smooth_servo.PanTilt()
+pantilt = smooth_stepper.PanTilt()
 
 HOST = "0.0.0.0"
 WEB_PORT = 5000
@@ -103,39 +104,7 @@ def robot_commands():
     print("hello movement")
     pantilt.move(angle_degrees,force)
 
-    # if state == 'move':
-    #     # for moving backward
-    #     if angle_degrees >= 260 and angle_degrees <= 280:
-    #         gopigo3_robot.set_speed(determined_speed)
-    #         gopigo3_robot.backward()
-
-    #     # for moving to the left or forward
-    #     if angle_degrees > 90 and angle_degrees < 260:
-    #         gopigo3_robot.set_motor_dps(gopigo3_robot.MOTOR_RIGHT, determined_speed)
-
-    #         left_motor_percentage = abs((angle_degrees - 170) / 90)
-    #         sign = -1 if angle_degrees >= 180 else 1
-
-    #         gopigo3_robot.set_motor_dps(gopigo3_robot.MOTOR_LEFT, determined_speed * left_motor_percentage * sign)
-
-    #     # for moving to the right (or forward)- upper half
-    #     if angle_degrees < 90 and angle_degrees >= 0:
-    #         gopigo3_robot.set_motor_dps(gopigo3_robot.MOTOR_LEFT, determined_speed)
-
-    #         right_motor_percentage = angle_degrees / 90
-    #         gopigo3_robot.set_motor_dps(gopigo3_robot.MOTOR_RIGHT, determined_speed * right_motor_percentage)
-    #     # for moving to the right (or forward)- bottom half
-    #     if angle_degrees <= 360 and angle_degrees > 280:
-    #         gopigo3_robot.set_motor_dps(gopigo3_robot.MOTOR_LEFT, determined_speed)
-
-    #         right_motor_percentage = (angle_degrees - 280) / 80 - 1
-    #         gopigo3_robot.set_motor_dps(gopigo3_robot.MOTOR_RIGHT, determined_speed * right_motor_percentage)
-
-    # elif state == 'stop':
-    #     gopigo3_robot.stop()
-    # else:
-    #     app.logging.warning('unknown state sent')
-
+    # TODO averiguar que es esto
     resp = Response()
     resp.mimetype = "application/json"
     resp.status = "OK"
