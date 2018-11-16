@@ -7,14 +7,18 @@ from math import cos,sin,radians
 import sys
 import time
 
-KR = 0.2 # Constante de rozamiento
+Kestatico = 0.4 # Constante de rozamiento
+Kdinamico = 0.8
 KR_EDGE = 1 # Constante de rozamiento cerca del borde #TODO
-EDGES = np.array([[-1000,1000],[-1000,1000]]) # Bordes xmin,xmax,ymin,ymax
-MASS = 1 #mass
-DELAY = 0.01
+EDGES = np.array([[-800,800],[-800,800]]) # Bordes xmin,xmax,ymin,ymax
+MASS = 0.001 #mass
+DELAY = 0.001
+EPSILON = 0.001
+VMAX = 100 #(steps / second aprox)
+MAXFORCE = 20 #fuerza maxima aplicable
 
-PINS_PAN= [17,22,23,24]
-PINS_TILT= [99,99,99,99] #TODO corregir
+PINS_PAN= [17,18,27,22]
+PINS_TILT= [26,19,13,16]
 
 # class created to run this module without GPIO library
 class GPIO_DUMMY(object):
@@ -68,15 +72,22 @@ class Stepper(object):
         # Initialise variables
         self._StepCounter = 0
     
+    # go back to original place and reset pins
     def __del__(self):
         # go back to the original position
-        self.steps(-self._x)
+        self.steps(-self._x,0.005)
+        # reset pins
+        for pin in self._StepPins:
+            print("Reset pins")
+            GPIO.setup(pin,GPIO.OUT)
+            GPIO.output(pin, False)
+
 
     def step(self,dir=1,delay=None):
         assert(dir==1 or dir==-1)
+        if delay is None:
+            delay = self._WaitTime
         if delay !=0:
-            if delay is None:
-                delay = self._WaitTime
             time.sleep(delay)
         self._StepCounter += dir
         self._x +=dir
@@ -121,6 +132,9 @@ class PanTilt():
         self._margin = np.array([50,50])
         self._moving=False
         self.set_steppers(steppers)
+        self._epsilon = EPSILON
+        self._dv_epsilon = self._epsilon/self._dt
+        self._v_max = VMAX
 
     def __del__(self):
         """Return to initial position"""
@@ -144,28 +158,39 @@ class PanTilt():
     def _Hramp(self,v):
         v0=v.copy() # +0 or copy() is important to create a new array. otherwise v is passed as reference.
         v0[v0>1]=1
-        v0[v0<0]=0
+        v0[v0<-1]=-1
         return v0
     
     def _update(self):
-        self._a = self._f/self._m - KR * self._Hramp(self._v)
+        if not self._fduration is None:
+            assert(isinstance(self._fduration,int))
+            if self._fduration<=0:
+                self._f = np.array([0,0])
+            else:
+                self._fduration -= 1
+        self._a = self._f/self._m - (Kestatico * self._Hramp(self._v) + Kdinamico * self._Hramp(self._v)*(self._v)**2)
         self._v += self._a * self._dt
         self._x += self._v * self._dt
         # edge correction
         if self._edges[0,0] > self._x[0]:
             self._x[0]=self._edges[0,0]
-            self._v[0]=0
         elif self._edges[0,1] < self._x[0]:
             self._x[0]=self._edges[0,1]
-            self._v[0]=0
         if self._edges[1,0] > self._x[1]:
             self._x[1]=self._edges[1,0]
-            self._v[1]=0
         elif self._edges[1,1] < self._x[1]:
             self._x[1]=self._edges[1,1]
-            self._v[1]=0
+        #velocity correction
+        vnorm = np.linalg.norm(self._v)
+        if vnorm>self._vmax:
+            self._v = self._v/vnorm*self._vmax
+        
     
     def _stop_check(self):
+        if (abs(self._v[0])<self._dv_epsilon and abs(self._v[1])<self._dv_epsilon) and \
+        (abs(self._f[0])==0 and abs(self._f[1])==0) or \
+        (self._v_max<self._dv_epsilon):
+            self._moving = False
         if self._moving is True:
             return False
         else:
@@ -180,7 +205,7 @@ class PanTilt():
             self._t = time.time()
             #TODO: considerar la posibilidad de dejar fijo el dt
             self._dt = self._t - prev_t
-            # self._dt=0.01
+            # self._dt=0.005 + self._delay
             self._update()
             #print(f"Location: {self._x}, velocity: {self._v}, acceleration: {self._a}, dt: {dt}")
             print("Location: x{}, velocity: {}, acceleration: {}, dt: {}".format(self._x,self._v,self._a,self._dt))
@@ -194,18 +219,24 @@ class PanTilt():
     def stop(self):
         self._moving = False
 
-    def move(self,force,angle):
-        self._update_input(force,angle)
+    def move(self,force,angle,duration=None):
+        self._update_input(force,angle,duration)
         if self._moving is False:
             task = threading.Thread(target=self._begin)
             task.start()
     
-    def _update_input(self,force,angle):
-        self._f[0] = cos(radians(angle))*force
-        self._f[1] = sin(radians(angle))*force
+    def _update_input(self,force,angle,duration):
+        if force>MAXFORCE:
+            force=MAXFORCE
+            print("MAXFORCE exceded, force is now equal to: ",MAXFORCE)
+        self._vmax = VMAX*force/MAXFORCE
+        self._f[0] = -cos(radians(angle))*force
+        self._f[1] = -sin(radians(angle))*force
+        self._fduration = duration
+            
 
 def main():
-    # import Adafruit_PCA9685
+    # import Adafruit_PCA9685 
     # pwm = Adafruit_PCA9685.PCA9685()
     # pantilt = PanTilt(pwm)
 
@@ -220,7 +251,9 @@ def main():
     tilt = Stepper(PINS_TILT)
     steppers = (pan,tilt)
     pantilt = PanTilt(steppers)
-    pantilt.move(10,30)
+    pantilt.move(10,30,5000)
+    time.sleep(1.5)
+    pantilt.move(20,30+180,300)
 
 
 if __name__ == "__main__":

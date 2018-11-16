@@ -1,9 +1,15 @@
 import threading
 import time
+from math import cos,sin,radians
+import numpy as np
+import code
 
-DELAY = 100 # Default delay in ms
+CHECK_DELAY = 0.001 #must be lower than MIN_DELAY
+MIN_DELAY = 0.001 # Default delay in seconds
+MAX_DELAY = 0.5 # Max delay in seconds
+MAX_DURATION = 3 #seconds to wait before stop
 
-PINS_PAN= [17,22,23,24]
+PINS_PAN= [17,18,27,22]
 PINS_TILT= [26,19,13,16]
 
 
@@ -27,21 +33,28 @@ except:
     gpio_enabled =  False
     print("Unable to load RPi.GPIO")
 
+import weakref
+
+
 class Stepper(object):
-    def __init__(self, pins,*args, **kwargs):
-        self._delay = 0
+    def __init__(self, pins):
+        self._delay = MIN_DELAY
         self._duration= 4 #loops
         self._running = False
         self._StepPins = pins
         self._x = 0
+        self._dir = 1
+        self._task = None
         # Use BCM GPIO references
         # instead of physical pin numbers
-        GPIO.setmode(GPIO.BCM)
+        # global GPIO #not useful
+        self._GPIO = GPIO
+        self._GPIO.setmode(GPIO.BCM)
         # Set all pins as output
         for pin in self._StepPins:
-            print("Setup pins")
-            GPIO.setup(pin,GPIO.OUT)
-            GPIO.output(pin, False)
+            # print("Setup pins")
+            self._GPIO.setup(pin,GPIO.OUT)
+            self._GPIO.output(pin, False)
         # Define advanced sequence
         # as shown in manufacturers datasheet
         self._Seq = [[1,0,0,1],
@@ -57,58 +70,197 @@ class Stepper(object):
         self._WaitTime = 10/float(1000)
         # Initialise variables
         self._StepCounter = 0
+    
+    def shutdown(self):
+        if self._task is not None:
+            if self._task.isAlive():
+                self._task.join()
+        self.goto(0,MIN_DELAY)
+        self._GPIO.setmode(GPIO.BCM)
+        # Set all pins as output
+        for pin in self._StepPins:
+            # print("Setup pins")
+            self._GPIO.setup(pin,GPIO.OUT)
+            self._GPIO.output(pin, False)
 
-    def _update_input(self,dir=1,delay=None,duration=None):
+    
+    def print_state(self):
+        print("Current x = {}\n".format(self._x))
+        print("Current dir = {}\n".format(self._dir))
+        print("Current delay = {}\n".format(self._delay))
+
+    def update_input(self,dir=None,delay=None,duration=None):
         if delay is None:
-            delay = DELAY
+            delay = MIN_DELAY
         if duration is None:
-            duration = abs(int(1000/delay))
+            duration = MAX_DURATION
+        if dir is None:
+            dir = 1
+        self._dir = dir
         self._delay = delay
         self._duration = duration
 
-    def start(self,delay=None,duration=None):
-        self._update_input(delay,duration)
+    def go(self,dir=None,delay=None,duration=None):
+        self.update_input(dir,delay,duration)
+        self.print_state()
         if self._running is False:
             self._running = True
-            task = threading.Thread(target=self._loop)
-            task.start()
+            self._task = threading.Thread(target=self._loop)
+            self._task.start()
+
+    def force(self,force,duration=None):
+        '''
+        calculo auxiliar y = ax +b where y:force x:delay
+        for force=20 --> delay=0.001
+        for force=1  --> delay=1
+        result --> x = -0.05257895 y + 1.05257895
+        '''        
+        if force>2:
+            force =2
+        if force<-2:
+            force = -2
+        # delay = -0.005210526315789473*abs(force) + 0.10521052631578946
+        # delay = -0.05257895 * abs(force) + 1.05257895
+        delay = 0.004/force/force
+        if delay>MAX_DELAY:
+            delay = MAX_DELAY
+        dir = int(np.sign(force))
+        if dir !=0:
+            self.go(dir,delay,duration)
+
+    
+    def goto(self,x,delay=None):
+        self.steps(x-self._x,delay)
     
     def _stop(self):
-        if self._duration<=0:
+        if self._duration<=0 or (self._x>=500 and self._dir>0) or (self._x<=-500 and self._dir<0):
+            print("Thread stopped")
+            self.print_state()
             self._running = False
             return True
         else:
             return False
     
+    def _wait(self,delay=None,check=True):
+        ''' wait until self._dir is changed or for the duration of self._delay 
+            variable CHECK_DELAY must be a divisor of self._delay for accuracy'''
+        if delay is not None:
+            self._delay = delay
+        sum_delays=0
+        init_dir = self._dir
+        if check is True:
+            while sum_delays<self._delay:
+                time.sleep(CHECK_DELAY)
+                sum_delays +=CHECK_DELAY
+                if init_dir!=self._dir:
+                    break #direction change
+        else:
+            time.sleep(self._delay)
+        self._duration -= self._delay
+    
     def _loop(self):
         while not self._stop():
-            self._step()
+            dir = self._dir
+            self._step(dir)
+            self._wait()
+
 
     def _step(self,dir):
-        time.sleep(self._delay)
         self._StepCounter += dir
         self._x +=dir
-        self._duration+=-1
         # If we reach the end of the sequence
         # start again
         if (self._StepCounter>=self._StepCount):
             self._StepCounter = 0
         if (self._StepCounter<0):
             self._StepCounter = self._StepCount+dir
-        print("Current position x=",self._x)
-        print(self._Seq[self._StepCounter])
+        # print("Current position x=",self._x)
+        # print(self._Seq[self._StepCounter])
         for pin in range(0, 4):
             xpin = self._StepPins[pin]
             if self._Seq[self._StepCounter][pin]!=0:
-                print(" Enable GPIO %i" %(xpin))
-                GPIO.output(xpin, True)
+                # print(" Enable GPIO %i" %(xpin))
+                self._GPIO.output(xpin, True)
             else:
-                GPIO.output(xpin, False)
+                self._GPIO.output(xpin, False)
 
     def steps(self,steps,delay=None):
+        # print("MIN_DELAY: {}, self._delay={}".format(MIN_DELAY,self._delay))
         if steps < 0:
             dir = -1
         else:
             dir = 1
+        self.update_input(dir,delay)
         for i in range(abs(steps)):
-            self._step(dir,delay)
+            self._step(dir)
+            self._wait(delay,False)
+
+class PanTilt(object):
+    def __init__(self, steppers=None,*args, **kwargs):
+        self._x = np.array([0.0,0.0])
+        self._a = np.array([0.0,0.0])
+        self._v = np.array([0.0,0.0])
+        self._f = np.array([0.0,0.0])
+        self._t = time.time()
+        self._steppers = None
+        self.set_steppers(steppers)
+
+    def shutdown(self):
+        if self._steppers is not None:
+            self._steppers[0].shutdown()
+            self._steppers[1].shutdown()
+
+    def set_steppers(self,steppers):
+        if steppers is None:
+            self._steppers = None
+        else:
+            if isinstance(steppers[0],Stepper) and isinstance(steppers[1],Stepper):
+                self._steppers = steppers
+            else:
+                raise TypeError("stepper should be of type Stepper")
+
+    def move(self,force,angle,duration=None):
+        self._f[0] = -cos(radians(angle))*force
+        self._f[1] = -sin(radians(angle))*force
+        if self._steppers is not None:
+            self._steppers[0].force(self._f[0],duration)
+            self._steppers[1].force(self._f[1],duration)
+        
+    
+def main():
+    
+    # import Adafruit_PCA9685 
+    # pwm = Adafruit_PCA9685.PCA9685()
+    # pantilt = PanTilt(pwm)
+
+    # pantilt = PanTilt()
+    # pantilt.move(50,45)
+    # time.sleep(1)
+    # pantilt.move(10,270)
+    # time.sleep(1)
+    # pantilt.stop()
+
+    pan = Stepper(PINS_PAN)
+    tilt = Stepper(PINS_TILT)
+    steppers = (pan,tilt)
+    pantilt = PanTilt(steppers)
+
+    code.interact(local=dict(globals(), **locals()))
+
+#calculo auxiliar y = ax +b where y:force x:delay
+# for force=20 --> delay=0.001
+# for force=1  --> delay=1
+# result --> x = -0.05257895 y + 1.05257895
+# import numpy as np
+# from numpy.linalg import inv
+# A = np.array([[0.1,1],[0.001,1]])
+# B = np.array([[1],[20]])
+# [a,b]=np.matmul(inv(A),B)
+# C = inv(np.array([[a[0],b[0]],[0,1]]))
+# print("delay = {}*abs(force) + {}".format(C[0,0],C[0,1]))
+
+
+
+if __name__ == "__main__":
+    main()      
+

@@ -151,6 +151,7 @@ class Servo:
             self._a= self._a_max * sign_dx
         else:
             # Case velocity is towards goal
+            # rozamiento proporcional al cuadrado de la velocidad
             dxfreno = self._v**2/2/self._a_max + self._dx_epsilon/2
             if abs(dx)>max(self._dx_max,dxfreno):
                 # Case distance higher than dx_max
@@ -192,19 +193,19 @@ class Servo:
         self._moving = False
         return True
     
-    def goto(self,x1,v_max=None,a_max=None,channel=None):
-        self.set_input(x1,v_max,a_max)
-        if self._moving is False:
-            task = threading.Thread(target=self._goto, args=(channel,))
-            task.start()
+    # def goto(self,x1,v_max=None,a_max=None,channel=None):
+    #     self.set_input(x1,v_max,a_max)
+    #     if self._moving is False:
+    #         task = threading.Thread(target=self._goto, args=(channel,))
+    #         task.start()
     
-    def moveto(self,x1,channel=None):
-        if channel is None:
-            channel=self._channel
-        if self._pwm is not None:
-            self._pwm.set_pwm(channel, 0, round(x1))
-            self._x = x1
-            time.sleep(2)
+    # def moveto(self,x1,channel=None):
+    #     if channel is None:
+    #         channel=self._channel
+    #     if self._pwm is not None:
+    #         self._pwm.set_pwm(channel, 0, round(x1))
+    #         self._x = x1
+    #         time.sleep(2)
             
 
 

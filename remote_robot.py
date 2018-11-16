@@ -29,7 +29,7 @@ from http import server
 
 # new imports
 # from driver import smooth_servo
-from driver.smooth_stepper import *
+from driver.stepper_driver import *
 
 logging.basicConfig(level = logging.DEBUG)
 
@@ -105,7 +105,7 @@ def robot_commands():
         determined_speed = MAX_SPEED
 
     print("hello movement")
-    pantilt.move(force,angle_degrees,30)
+    pantilt.move(force,angle_degrees)
 
     # TODO averiguar que es esto
     resp = Response()
@@ -229,6 +229,7 @@ if __name__ == "__main__":
     # and finalize shutting them down
     webserver.join()
     streamserver.join()
+    pantilt.shutdown()
     logging.info("Stopped all threads")
 
     sys.exit(0)
