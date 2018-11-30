@@ -200,6 +200,7 @@ if __name__ == "__main__":
     camera = picamera.PiCamera(resolution='320x240', framerate=30)
     output = StreamingOutput()
     camera.start_recording(output, format='mjpeg')
+    camera.start_recording('grabacion.h264',splitter_port=2)
     logging.info("Started recording with picamera")
     STREAM_PORT = 5001
     stream = StreamingServer((HOST, STREAM_PORT), StreamingHandler)
@@ -223,6 +224,7 @@ if __name__ == "__main__":
 
     # trigger shutdown procedure
     webserver.shutdown()
+    camera.stop_recording(splitter_port=2)
     camera.stop_recording()
     stream.shutdown()
 

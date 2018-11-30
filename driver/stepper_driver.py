@@ -33,7 +33,6 @@ except:
     gpio_enabled =  False
     print("Unable to load RPi.GPIO")
 
-import weakref
 
 
 class Stepper(object):
