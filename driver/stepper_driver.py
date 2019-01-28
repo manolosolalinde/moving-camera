@@ -7,7 +7,7 @@ import code
 CHECK_DELAY = 0.001 #must be lower than MIN_DELAY
 MIN_DELAY = 0.001 # Default delay in seconds
 MAX_DELAY = 0.5 # Max delay in seconds
-MAX_DURATION = 3 #seconds to wait before stop
+MAX_DURATION = 1 #seconds to wait before stop
 
 PINS_PAN= [17,18,27,22]
 PINS_TILT= [26,19,13,16]
@@ -114,13 +114,13 @@ class Stepper(object):
         for force=1  --> delay=1
         result --> x = -0.05257895 y + 1.05257895
         '''        
-        if force>2:
-            force =2
-        if force<-2:
-            force = -2
+        if force>1:
+            force =1
+        if force<-1:
+            force = -1
         # delay = -0.005210526315789473*abs(force) + 0.10521052631578946
         # delay = -0.05257895 * abs(force) + 1.05257895
-        delay = 0.004/force/force
+        delay = 0.001/force/force
         if delay>MAX_DELAY:
             delay = MAX_DELAY
         dir = int(np.sign(force))
@@ -224,6 +224,14 @@ class PanTilt(object):
         if self._steppers is not None:
             self._steppers[0].force(self._f[0],duration)
             self._steppers[1].force(self._f[1],duration)
+    
+    def gamepad_move(self,forcex,forcey,duration=None):
+        self._f[0]=forcex
+        self._f[1]=forcey
+        if self._steppers is not None:
+            self._steppers[0].force(self._f[0],duration)
+            self._steppers[1].force(self._f[1],duration)
+
         
     
 def main():

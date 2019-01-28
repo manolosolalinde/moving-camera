@@ -6,38 +6,39 @@
 # You MUST run this with python3
 # To Run:  python3 flask_server.py
 
-import signal
-import sys
+# imports needed for stream server
+import io
 import logging
+import signal
+import socketserver
+import subprocess
+import sys
+import time
+from http import server
+from threading import Condition, Event, Thread
 from time import sleep
+
+# imports needed for web server
+from flask import (Flask, Response, jsonify, render_template, request,
+                   send_from_directory, url_for)
+from werkzeug.serving import make_server
+
+import picamera
+from driver.stepper_driver import *
 
 # check if it's ran with Python3
 assert sys.version_info[0:1] == (3,)
 
-# imports needed for web server
-from flask import Flask, jsonify, render_template, request, Response, send_from_directory, url_for
-from werkzeug.serving import make_server
 # from gopigo3 import FirmwareVersionError
 # from easygopigo3 import EasyGoPiGo3
-
-# imports needed for stream server
-import io
-import picamera
-import socketserver
-from threading import Condition, Thread, Event
-from http import server
-
-# new imports
-# from driver import smooth_servo
-from driver.stepper_driver import *
 
 logging.basicConfig(level = logging.DEBUG)
 
 # for triggering the shutdown procedure when a signal is detected
-keyboard_trigger = Event()
-def signal_handler(signal, frame):
-    logging.info('Signal detected. Stopping threads.')
-    keyboard_trigger.set()
+# keyboard_trigger = Event()
+# def signal_handler(signal, frame):
+#     logging.info('Signal detected. Stopping threads.')
+#     keyboard_trigger.set()
 
 #######################
 ### Web Server Stuff ##
@@ -49,19 +50,8 @@ def signal_handler(signal, frame):
 directory_path = '/home/pi/BITBUCKET/moving-camera/static'
 
 MAX_FORCE = 5.0
-MIN_SPEED = 100
+MIN_SPEED = 100.
 MAX_SPEED = 300
-# try:
-#     gopigo3_robot = EasyGoPiGo3()
-# except IOError:
-#     logging.critical('GoPiGo3 is not detected.')
-#     sys.exit(1)
-# except FirmwareVersionError:
-#     logging.critical('GoPiGo3 firmware needs to be updated')
-#     sys.exit(2)
-# except Exception:
-#     logging.critical("Unexpected error when initializing GoPiGo3 object")
-#     sys.exit(3)
 
 pan = Stepper(PINS_PAN)
 tilt = Stepper(PINS_TILT)
@@ -70,7 +60,20 @@ pantilt = PanTilt(steppers)
 
 HOST = "0.0.0.0"
 WEB_PORT = 5000
+
 app = Flask(__name__, static_url_path='')
+
+# socket io stuff
+from flask_socketio import SocketIO, emit
+socketio = SocketIO(app)
+
+@socketio.on("submit gamepad")
+def gamepad(data):
+    # 0-3 axis 4-n buttons
+    controller = data
+    for idx,value in enumerate(controller):
+        if value != 0 and idx!=2:
+            print("Value {0} = {1}".format(idx,value))
 
 class WebServerThread(Thread):
     '''
@@ -187,51 +190,78 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
 
+##############################
+### Youtube Broadcast Stuff ##
+##############################
+
+# import io
+YOUTUBE="rtmp://a.rtmp.youtube.com/live2/" 
+KEY= "mtx7-wuwc-0fs0-47pa"
+# stream_cmd = 'ffmpeg -f h264 -r 25 -i - -itsoffset 5.5 -f alsa -ac 1 -i hw:1,0 -vcodec copy -acodec aac -ac 1 -ar 8000 -ab 32k -filter:a "volume=+5dB" -map 0:0 -map 1:0 -strict experimental -f flv ' + YOUTUBE + KEY 
+stream_cmd = 'ffmpeg -loglevel -8 -f h264 -r 25 -y -i - -itsoffset 5.5 -fflags nobuffer -use_wallclock_as_timestamps 1 -f alsa -ac 1 -i hw:1,0 -vcodec copy -acodec aac -ac 1 -ar 8000 -ab 32k -filter:a "volume=+15dB" -map 0:0 -map 1:0 -strict experimental out.mkv'
+
+
 #############################
 ### Aggregating all calls ###
 #############################
 
 if __name__ == "__main__":
     # registering both types of signals
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # signal.signal(signal.SIGINT, signal_handler)
+    # signal.signal(signal.SIGTERM, signal_handler)
 
     # firing up the video camera (pi camera)
-    camera = picamera.PiCamera(resolution='320x240', framerate=30)
-    output = StreamingOutput()
-    camera.start_recording(output, format='mjpeg')
-    camera.start_recording('grabacion.h264',splitter_port=2)
-    logging.info("Started recording with picamera")
-    STREAM_PORT = 5001
-    stream = StreamingServer((HOST, STREAM_PORT), StreamingHandler)
+    with picamera.PiCamera(resolution='640x480', framerate=25) as camera:
+        camera.vflip = True 
+        camera.hflip = True 
 
-    # starting the video streaming server
-    streamserver = Thread(target = stream.serve_forever)
-    streamserver.start()
-    logging.info("Started stream server for picamera")
+        stream_pipe = subprocess.Popen(stream_cmd, shell=True, stdin=subprocess.PIPE) 
+        output = StreamingOutput()
+        # camera.start_recording('grabacion.h264',splitter_port=2)
+        camera.start_recording(stream_pipe.stdin, format='h264', bitrate = 2000000) 
+        camera.start_recording(output,resize=(320,240), format='mjpeg',splitter_port=2)
+        logging.info("Started recording with picamera")
 
-    # starting the web server
-    webserver = WebServerThread(app, HOST, WEB_PORT)
-    webserver.start()
-    logging.info("Started Flask web server")
+        STREAM_PORT = 5001
+        stream = StreamingServer((HOST, STREAM_PORT), StreamingHandler)
 
-    # and run it indefinitely
-    while not keyboard_trigger.is_set():
-        sleep(0.5)
+        # # starting the video streaming server
+        streamserver = Thread(target = stream.serve_forever)
+        streamserver.start()
+        logging.info("Started stream server for picamera")
 
-    # until some keyboard event is detected
-    logging.info("Keyboard event detected")
+        # # starting the web server
+        webserver = WebServerThread(app, HOST, WEB_PORT)
+        webserver.start()
+        logging.info("Started Flask web server")
 
-    # trigger shutdown procedure
-    webserver.shutdown()
-    camera.stop_recording(splitter_port=2)
-    camera.stop_recording()
-    stream.shutdown()
+        # and run it indefinitely
+        try:
+            while True:
+                sleep(0.5)
+                # print("Sleep") 
+        except KeyboardInterrupt:
+            print("Keyboard interrupt") 
 
-    # and finalize shutting them down
-    webserver.join()
-    streamserver.join()
-    pantilt.shutdown()
-    logging.info("Stopped all threads")
+        # until some keyboard event is detected
+        logging.info("Keyboard event detected")
+        camera.stop_recording(splitter_port=2)
+        camera.stop_recording()
 
+        logging.info("Camera Stopped recording")
+
+        # trigger shutdown procedure
+        webserver.shutdown()
+        stream.shutdown()
+
+        # and finalize shutting them down
+        webserver.join()
+        streamserver.join()
+        pantilt.shutdown()
+        logging.info("Stopped all threads")
+        
+        # finalize youtube streaming
+        stream_pipe.stdin.close() 
+        stream_pipe.wait() 
+    
     sys.exit(0)

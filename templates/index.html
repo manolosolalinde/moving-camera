@@ -7,6 +7,8 @@
     <script src="static/nipplejs.js"></script>
     <script src="static/jquery-3.2.1.min.js"></script>
     <script src="static/throttle.js"></script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+    <script src="static/gamepad.js"></script>
 
     <title>Remote Camera</title>
 
@@ -16,7 +18,7 @@
     <div class="container">
         <div id="zone_joystick">
           <script language="JavaScript">
-            document.write('<img id="video_source" src="' + window.location.protocol + '//' + window.location.hostname + ':5001' + '/stream.mjpg' + '"/>' );
+            document.write('<img id="video_source" src="' + window.location.protocol + '//' + window.location.hostname + ':5001' + '/stream.mjpg' + '" width="640" height="480" />' );
           </script>
             
           

@@ -1,0 +1,15 @@
+<html>
+<head>
+    <link rel="stylesheet" href="static/style.css"/>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+    <script src="static/gamepad.js"></script>
+<title>Remote Camera</title>
+</head>
+<body>
+<script language="JavaScript">
+            document.write('<img id="video_source" src="' + window.location.protocol + '//' + window.location.hostname + ':5001' + '/stream.mjpg' + '" width="640" height="480" />' );
+</script>
+<!-- <img src="stream.mjpg" width="640" height="480" />
+-->
+</body>
+</html>
